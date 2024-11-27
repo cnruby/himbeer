@@ -1,0 +1,104 @@
+# This workflow uses actions that are not certified by GitHub.  They are
+# provided by a third-party and are governed by separate terms of service,
+# privacy policy, and support documentation.
+#
+# This workflow will install a prebuilt Ruby version, install dependencies, and
+# run tests and linters.
+name: "Ruby on Rails CI"
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+jobs:
+  test-rspec:
+    timeout-minutes: 30
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - name: Set up database schema
+        run: bin/rails db:schema:load
+      - name: Cache yarn packages
+        uses: actions/cache@v3
+        with:
+          key: yarn-v2-${{ hashFiles('yarn.lock') }}
+          path: |
+            ./node_modules
+            ./.yarn/cache
+          restore-keys: |
+            yarn-v2-${{ hashFiles('yarn.lock') }}
+            yarn-v2-
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile
+      - name: Get installed Playwright version
+        run: |
+          YARN_JSON="$(yarn info @playwright/test dist --json)"
+          PLAYWRIGHT_VERSION=$(node -e "console.log(JSON.parse('$YARN_JSON').value)")
+          echo "PLAYWRIGHT_VERSION=$PLAYWRIGHT_VERSION" >> $GITHUB_ENV
+          echo "Playwright VERSION: $PLAYWRIGHT_VERSION"
+      - name: Cache playwright binaries
+        uses: actions/cache@v3
+        id: playwright-cache
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            /Users/runner/Library/Caches/ms-playwright
+          key: "${{ runner.os }}-playwright-v7-${{env.PLAYWRIGHT_VERSION}}"
+      - name: Install Playwright Browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Make directories for storing screenshots
+        run: |
+          mkdir -p tmp/capybara/screenshots
+          mkdir -p tmp/screenshots
+      - name: Run tests
+        run: bundle exec rspec
+      - uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: Playwright Test Results
+          path: |
+            tmp/screenshots
+      - uses: actions/download-artifact@v3
+        if: failure()
+        with:
+          name: Playwright Test Results
+          path: |
+            tmp/screenshots
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Cache yarn packages
+        uses: actions/cache@v3
+        with:
+          key: yarn-v2-${{ hashFiles('yarn.lock') }}
+          path: |
+            ./node_modules
+            ./.yarn/cache
+          restore-keys: |
+            yarn-v2-${{ hashFiles('yarn.lock') }}
+            yarn-v2-
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile
+      - name: Run frontend tests
+        run: yarn test:unit
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      # Add or replace any other lints here
+      #- name: Security audit dependencies
+      #  run: bin/bundler-audit --update
+      #- name: Security audit application code
+      #  run: bin/brakeman -q -w2
+      #- name: Lint Ruby files
+      #  run: bin/rubocop --parallel

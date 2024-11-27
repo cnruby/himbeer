@@ -1,0 +1,22 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": [
+    "env.d.ts",
+    "app/frontend/**/*",
+    "app/frontend/**/*.vue"
+  ],
+  "exclude": [
+    "app/frontend/**/__tests__/*"
+  ],
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "target": "esnext",
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "app/frontend/*"
+      ]
+    }
+  }
+}
